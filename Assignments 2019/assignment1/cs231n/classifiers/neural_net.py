@@ -80,8 +80,10 @@ class TwoLayerNet(object):
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
-
+        a1 = X.dot(W1) + b1
+        a1[a1<0] = 0
+        scores = a1.dot(W2)+b2
+        # print(scores.shape)
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
         # If the targets are not given then jump out, we're done
@@ -97,8 +99,16 @@ class TwoLayerNet(object):
         # classifier loss.                                                          #
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
+        num_train = X.shape[0]
+        data_loss = 0.0
+        scores-= np.max(scores,axis = 1,keepdims = True)
+        softmax = np.exp(scores)/(np.exp(scores).sum(axis=1,keepdims= True))
+        data_loss+= np.sum(-np.log(softmax[np.arange(num_train),y]))
 
-        pass
+        data_loss/=num_train
+        reg_loss = reg*(np.sum(W1*W1)+np.sum(W2*W2))
+
+        loss = data_loss+reg_loss
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -111,7 +121,15 @@ class TwoLayerNet(object):
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        dW2 = np.zeros_like(W2)
+        db2 = np.zeros_like(b2)
+        dW1 = np.zeros_like(W1)
+        db1 = np.zeros_like(b1)
+
+        softmax[np.arange(num_train),y]-=1
+        dW2 = X.T.dot(softmax)
+        grads['W2'] = dW2
+         
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
