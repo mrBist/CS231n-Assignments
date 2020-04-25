@@ -80,6 +80,7 @@ class TwoLayerNet(object):
           names to gradients of the loss with respect to those parameters.
         """
         scores = None
+        num_train = X.shape[0]
         ############################################################################
         # TODO: Implement the forward pass for the two-layer net, computing the    #
         # class scores for X and storing them in the scores variable.              #
@@ -108,19 +109,18 @@ class TwoLayerNet(object):
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
         loss,dout = softmax_loss(scores,y)
-        dactivated_fc1,dW2,db2 = affine_backward(dout,cache_fc2)
-        dfc1 = relu_backward(dactivated_fc1,relu_cache)
-        dX,dW1,db1 = affine_backward(dfc1,cache_fc1)
+        relu_grad,dW2,db2 = affine_backward(dout,cache_fc2)
+        dfc1 = relu_backward(relu_grad,relu_cache)
+        dx,dW1,db1 = affine_backward(dfc1,cache_fc1)
         grads['W1'] = dW1+self.reg*self.params['W1']
         grads['b1'] = db1
         grads['W2'] = dW2+self.reg*self.params['W2']
         grads['b2'] = db2
-
         loss+= 0.5*self.reg*(np.sum(self.params['W1']*self.params['W1'])+np.sum(self.params['W2']*self.params['W2']))
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
-
+        # print(loss,"in fc1")
         return loss, grads
 
 
@@ -182,7 +182,12 @@ class FullyConnectedNet(object):
         # beta2, etc. Scale parameters should be initialized to one and shift      #
         # parameters should be initialized to zero.                                #
         ############################################################################
-        pass
+        all_dims = np.hstack((input_dim,hidden_dims,num_classes))
+
+        for i in range(len(all_dims)-1):
+            self.params['W%d'%(i+1)] = weight_scale*np.random.randn(all_dims[i],all_dims[i+1])
+            self.params['b%d'%(i+1)] = np.zeros(all_dims[i+1])
+
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -204,7 +209,9 @@ class FullyConnectedNet(object):
         self.bn_params = []
         if self.use_batchnorm:
             self.bn_params = [{'mode': 'train'} for i in range(self.num_layers - 1)]
-
+            for i in range(self.num_layers-1):
+                self.params['gamma%d'%(i+1)] = np.ones(all_dims[i+1])
+                self.params['beta%d'%(i+1)] = np.zeros(all_dims[i+1])
         # Cast all parameters to the correct datatype
         for k, v in self.params.items():
             self.params[k] = v.astype(dtype)
@@ -240,7 +247,28 @@ class FullyConnectedNet(object):
         # self.bn_params[1] to the forward pass for the second batch normalization #
         # layer, etc.                                                              #
         ############################################################################
-        pass
+        dims = self.num_layers
+        scores = X
+        store_cache = []
+        reg_loss = 0
+        store_bn_cache = []
+        dropout_cnt=0
+        for i in range(dims-1):
+            if self.use_batchnorm:
+                scores,cache = affine_bn_relu_forward(scores,self.params['W%d'%(i+1)],self.params['b%d'%(i+1)],self.params['gamma%d'%(i+1)],self.params['beta%d'%(i+1)],self.bn_params[i])
+            else:
+                scores,cache = affine_relu_forward(scores,self.params['W%d'%(i+1)],self.params['b%d'%(i+1)])
+            store_cache.append(cache)
+            if self.use_dropout:
+                scores,drp_cache = dropout_forward(scores,self.dropout_param)
+                store_cache.append(drp_cache)
+                dropout_cnt+=1
+            reg_loss+= np.sum(self.params['W%d'%(i+1)]**2)
+
+
+        scores,cache = affine_forward(scores,self.params['W%d'%(dims)],self.params['b%d'%(dims)])
+        store_cache.append(cache)
+        reg_loss+= np.sum(self.params['W%d'%(dims)]**2)
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -250,6 +278,10 @@ class FullyConnectedNet(object):
             return scores
 
         loss, grads = 0.0, {}
+        W1 = self.params['W1']
+        W2 = self.params['W2']
+        b1 = self.params['b1']
+        b2 = self.params['b2']
         ############################################################################
         # TODO: Implement the backward pass for the fully-connected net. Store the #
         # loss in the loss variable and gradients in the grads dictionary. Compute #
@@ -263,7 +295,27 @@ class FullyConnectedNet(object):
         # automated tests, make sure that your L2 regularization includes a factor #
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
-        pass
+
+        loss,dout = softmax_loss(scores,y)
+        loss+= 0.5*self.reg*reg_loss
+
+        dfc,grads['W%d'%(dims)],grads['b%d'%(dims)] = affine_backward(dout,store_cache.pop())
+        grads['W%d'%(dims)]+=self.reg*self.params['W%d'%(dims)]
+        # print(grads['W%d'%(dims)])
+        ind = len(store_cache)-1-dropout_cnt
+
+        while ind >= 0:
+            if self.use_dropout:
+                dfc = dropout_backward(dfc,store_cache.pop())
+            if self.use_batchnorm:
+                dfc,grads['W%d'%(ind+1)],grads['b%d'%(ind+1)],grads['gamma%d'%(ind+1)],grads['beta%d'%(ind+1)] = affine_bn_relu_backward(dfc,store_cache.pop())
+            else:
+                dfc,grads['W%d'%(ind+1)],grads['b%d'%(ind+1)] = affine_relu_backward(dfc,store_cache.pop())
+            grads['W%d'%(ind+1)]+=self.reg*self.params['W%d'%(ind+1)]
+            ind-=1
+            # print(ind)s
+
+
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################

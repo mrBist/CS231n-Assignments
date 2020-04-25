@@ -161,7 +161,9 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     N, D = x.shape
     running_mean = bn_param.get('running_mean', np.zeros(D, dtype=x.dtype))
     running_var = bn_param.get('running_var', np.zeros(D, dtype=x.dtype))
-
+    norm_x = 0.0
+    sample_mean = 0.0
+    sample_var = 0.0
     out, cache = None, None
     if mode == 'train':
         #######################################################################
@@ -179,7 +181,12 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # variance, storing your result in the running_mean and running_var   #
         # variables.                                                          #
         #######################################################################
-        pass
+        sample_mean = np.mean(x,axis = 0)
+        sample_var = np.var(x,axis = 0)
+        norm_x = (x-sample_mean)/np.sqrt(sample_var+eps)
+        out = norm_x*gamma + beta
+        running_mean = momentum * running_mean + (1 - momentum) * sample_mean
+        running_var = momentum * running_var + (1 - momentum) * sample_var
         #######################################################################
         #                           END OF YOUR CODE                          #
         #######################################################################
@@ -190,7 +197,8 @@ def batchnorm_forward(x, gamma, beta, bn_param):
         # then scale and shift the normalized data using gamma and beta.      #
         # Store the result in the out variable.                               #
         #######################################################################
-        pass
+        norm_x_test = (x-running_mean)/np.sqrt(running_var+eps)
+        out = norm_x_test*gamma + beta
         #######################################################################
         #                          END OF YOUR CODE                           #
         #######################################################################
@@ -200,7 +208,7 @@ def batchnorm_forward(x, gamma, beta, bn_param):
     # Store the updated running means back into bn_param
     bn_param['running_mean'] = running_mean
     bn_param['running_var'] = running_var
-
+    cache = (norm_x,sample_mean,eps,gamma,beta,sample_var,x)
     return out, cache
 
 
@@ -226,7 +234,29 @@ def batchnorm_backward(dout, cache):
     # TODO: Implement the backward pass for batch normalization. Store the    #
     # results in the dx, dgamma, and dbeta variables.                         #
     ###########################################################################
-    pass
+    norm_x,mean,eps,gamma,beta,var,x = cache
+
+    dgamma = (dout*norm_x).sum(axis=0)
+    dbeta = dout.sum(axis = 0)
+
+    #look into computaional graph to make more sense
+    N,D = x.shape
+    dnorm_x = dout*gamma
+    inverse_var = 1/np.sqrt(var+eps)
+    dx_mu1 = inverse_var*dnorm_x # (x-mean)
+    divar = (dnorm_x*(x-mean)).sum(axis = 0)
+    dsqrt_var = -1*divar/(np.sqrt(var+eps)**2)
+    dvar = 0.5*dsqrt_var/np.sqrt(var+eps)
+    dvar_summation = (np.ones_like(x)*dvar)/N
+    dx_mu2 = 2*(x-mean)*dvar_summation
+    dmu = -(dx_mu2 + dx_mu1).sum(axis = 0)
+    dx1 = dx_mu2 + dx_mu1
+    dx2 = (np.ones((N,D))*dmu)/N
+    dx = dx1 + dx2
+    # print(dx)
+    # Refer to the following link for dx
+    # https://kratzert.github.io/2016/02/12/understanding-the-gradient-flow-through-the-batch-normalization-layer.html
+
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -248,6 +278,10 @@ def batchnorm_backward_alt(dout, cache):
     Inputs / outputs: Same as batchnorm_backward
     """
     dx, dgamma, dbeta = None, None, None
+
+    """
+    http://cthorey.github.io./backpropagation/
+    There is some intense math in the above link """
     ###########################################################################
     # TODO: Implement the backward pass for batch normalization. Store the    #
     # results in the dx, dgamma, and dbeta variables.                         #
@@ -295,7 +329,8 @@ def dropout_forward(x, dropout_param):
         # TODO: Implement training phase forward pass for inverted dropout.   #
         # Store the dropout mask in the mask variable.                        #
         #######################################################################
-        pass
+        mask = (np.random.rand(*x.shape)<p)/p
+        out = x*mask
         #######################################################################
         #                           END OF YOUR CODE                          #
         #######################################################################
@@ -303,7 +338,7 @@ def dropout_forward(x, dropout_param):
         #######################################################################
         # TODO: Implement the test phase forward pass for inverted dropout.   #
         #######################################################################
-        pass
+        out = x
         #######################################################################
         #                            END OF YOUR CODE                         #
         #######################################################################
@@ -330,7 +365,7 @@ def dropout_backward(dout, cache):
         #######################################################################
         # TODO: Implement training phase backward pass for inverted dropout   #
         #######################################################################
-        pass
+        dx = dout*mask
         #######################################################################
         #                          END OF YOUR CODE                           #
         #######################################################################
