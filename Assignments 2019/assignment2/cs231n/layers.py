@@ -254,9 +254,10 @@ def batchnorm_backward(dout, cache):
     dx2 = (np.ones((N,D))*dmu)/N
     dx = dx1 + dx2
     # print(dx)
-    # Refer to the following link for dx
-    # https://kratzert.github.io/2016/02/12/understanding-the-gradient-flow-through-the-batch-normalization-layer.html
-
+    """
+    Refer to the following link for dx
+    https://kratzert.github.io/2016/02/12/understanding-the-gradient-flow-through-the-batch-normalization-layer.html
+    """
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -380,7 +381,7 @@ def conv_forward_naive(x, w, b, conv_param):
 
     The input consists of N data points, each with C channels, height H and
     width W. We convolve each input with F different filters, where each filter
-    spans all C channels and has height HH and width HH.
+    spans all C channels and has height HH and width WW.
 
     Input:
     - x: Input data of shape (N, C, H, W)
@@ -397,12 +398,29 @@ def conv_forward_naive(x, w, b, conv_param):
       W' = 1 + (W + 2 * pad - WW) / stride
     - cache: (x, w, b, conv_param)
     """
+
     out = None
+    pad = conv_param['pad']
+    stride = conv_param['stride']
+    N,C,H,W = x.shape
+    F,_,HH,WW = w.shape
+    H_dash = 1 + (H + 2 * pad - HH) // stride
+    W_dash = 1 + (W + 2 * pad - WW) // stride
+    out = np.empty((N,F,H_dash,W_dash))
+
     ###########################################################################
     # TODO: Implement the convolutional forward pass.                         #
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
-    pass
+    padded_x = np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad)), 'constant', constant_values=0)
+    for n in range(N):
+        for f in range(F):
+            for i in range(H_dash):
+                for j in range(W_dash):
+                    # print(i*stride,i*stride+HH,j*stride,j*stride+WW)
+                    out[n,f,i,j] = np.sum(padded_x[n,:,i*stride:i*stride+HH,j*stride:j*stride+WW]*w[f,:,:,:])+b[f]
+
+
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -423,11 +441,36 @@ def conv_backward_naive(dout, cache):
     - dw: Gradient with respect to w
     - db: Gradient with respect to b
     """
+    """
+    The backprop is kinda complex. Refer to this link for a good explanation.
+    http://cthorey.github.io./backprop_conv/
+    """
     dx, dw, db = None, None, None
+    x,w,b,conv_param = cache
+    N,C,H,W = x.shape
+    F,_,HH,WW = w.shape
+    pad = conv_param['pad']
+    stride = conv_param['stride']
     ###########################################################################
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
-    pass
+    padded_x = np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad)), 'constant', constant_values=0)
+    H_dash = 1 + (H + 2 * pad - HH) // stride
+    W_dash = 1 + (W + 2 * pad - WW) // stride
+    dx_pad = np.zeros_like(padded_x)
+    dx = np.zeros_like(x)
+    dw = np.zeros_like(w)
+    db = np.zeros_like(b)
+    for n in range(N):
+        for f in range(F):
+            for i in range(H_dash):
+                for j in range(W_dash):
+                    dw[f]+= padded_x[n,:,i*stride:i*stride+HH,j*stride:j*stride+WW]*dout[n,f,i,j]
+                    dx_pad[n,:,i*stride:i*stride+HH,j*stride:j*stride+WW]+=w[f]*dout[n,f,i,j]
+
+    dx = dx_pad[:,:,pad:pad+H,pad:pad+W]
+    for f in range(F):
+        db[f] = dout[:,f].sum()
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -450,6 +493,9 @@ def max_pool_forward_naive(x, pool_param):
     - cache: (x, pool_param)
     """
     out = None
+    pool_height = pool_param['pool_height']
+    pool_width = pool_param['pool_width']
+    
     ###########################################################################
     # TODO: Implement the max pooling forward pass                            #
     ###########################################################################
